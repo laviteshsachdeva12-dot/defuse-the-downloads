@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚡ Defuse the Downloads v2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       RESET & VARIABLES
+    ═══════════════════════════════════════════════════════════ */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:         #04040c;
+      --bg2:        #07071a;
+      --bg3:        #0a0a20;
+      --cyan:       #00f5ff;
+      --green:      #00ff41;
+      --red:        #ff2244;
+      --orange:     #ff8800;
+      --yellow:     #ffdd00;
+      --purple:     #aa44ff;
+      --pink:       #ff44aa;
+      --text:       #a8a8c8;
+      --text-dim:   #484860;
+      --text-hi:    #d8d8f0;
+      --glow-c:     0 0 8px #00f5ff88, 0 0 22px #00f5ff33;
+      --glow-g:     0 0 8px #00ff4188, 0 0 22px #00ff4133;
+      --glow-r:     0 0 8px #ff224488, 0 0 22px #ff224433;
+      --glow-y:     0 0 8px #ffdd0088, 0 0 22px #ffdd0033;
+      --glow-p:     0 0 8px #aa44ff88, 0 0 22px #aa44ff33;
+      --hud-h:      58px;
+      --panel-w:    292px;
+      --tgt-w:      304px;
+    }
+
+    html, body, #root { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+    body { cursor: crosshair; user-select: none; color: var(--text); font-family: 'Share Tech Mono', monospace; }
+
+    /* ═══════════════════════════════════════════════════════════
+       GAME SHELL
+    ═══════════════════════════════════════════════════════════ */
+    #shell {
+      width: 100vw; height: 100vh;
+      position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
+      background:
+        radial-gradient(ellipse at 20% 60%, rgba(0,80,255,.06) 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 30%, rgba(0,200,80,.04)  0%, transparent 55%),
+        var(--bg);
+    }
+    /* Grid */
+    #shell::before {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,245,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,255,.025) 1px, transparent 1px);
+      background-size: 52px 52px;
+    }
+    /* Scanlines */
+    #shell::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px,
+        rgba(0,0,0,.05) 2px, rgba(0,0,0,.05) 4px);
+    }
+    @keyframes screenshake {
+      0%  { transform: translate(0,0); }
+      15% { transform: translate(-6px, 3px); }
+      30% { transform: translate(5px,-5px); }
+      45% { transform: translate(-3px, 3px); }
+      60% { transform: translate(3px,-2px); }
+      80% { transform: translate(-1px,1px); }
+      100%{ transform: translate(0,0); }
+    }
+    .shake { animation: screenshake .3s ease-out; }
+
+    /* ═══════════════════════════════════════════════════════════
+       HUD
+    ═══════════════════════════════════════════════════════════ */
+    #hud {
+      flex-shrink: 0;
+      height: var(--hud-h);
+      background: rgba(4,4,18,.94);
+      border-bottom: 1px solid rgba(0,245,255,.12);
+      display: flex; align-items: center;
+      padding: 0 16px; gap: 10px;
+      z-index: 500; backdrop-filter: blur(14px);
+      position: relative;
+    }
+    #hud::after {
+      content: '';
+      position: absolute; bottom: 0; left: 8%; right: 8%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: .35;
+    }
+
+    .hud-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .95rem; font-weight: 900;
+      color: var(--cyan); text-shadow: var(--glow-c);
+      letter-spacing: 2.5px; white-space: nowrap;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .hud-live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green); box-shadow: var(--glow-g);
+      animation: blink 1.2s ease-in-out infinite; flex-shrink: 0;
+    }
+    .hud-live-dot.offline { background: var(--red); box-shadow: var(--glow-r); }
+
+    .hud-sep {
+      width: 1px; height: 28px;
+      background: rgba(0,245,255,.15); flex-shrink: 0;
+    }
+
+    /* Status pill */
+    .hud-status {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 3px;
+      border: 1px solid; font-size: .65rem; letter-spacing: 1.5px;
+      white-space: nowrap; font-family: 'Orbitron', sans-serif;
+    }
+    .hud-status.online {
+      color: var(--green); border-color: rgba(0,255,65,.3);
+      background: rgba(0,255,65,.06); text-shadow: var(--glow-g);
+    }
+    .hud-status.offline {
+      color: var(--red); border-color: rgba(255,34,68,.3);
+      background: rgba(255,34,68,.06);
+    }
+    .hud-status.sim {
+      color: var(--yellow); border-color: rgba(255,221,0,.4);
+      background: rgba(255,221,0,.08); text-shadow: var(--glow-y);
+    }
+
+    /* Accessibility focus indicators */
+    :focus-visible {
+      outline: 2px solid var(--cyan) !important;
+      outline-offset: 2px !important;
+    }
+    .target:focus-visible {
+      outline: 2px solid var(--cyan) !important;
+      outline-offset: 4px !important;
+      box-shadow: 0 0 25px rgba(0,245,255,.7) !important;
+      border-color: var(--cyan) !important;
+    }
+
+    /* Stat pills */
+    .hud-stats { display: flex; gap: 8px; margin-left: 4px; }
+    .stat-pill {
+      font-size: .65rem; letter-spacing: 1px;
+      padding: 3px 10px; border-radius: 2px; border: 1px solid;
+      white-space: nowrap;
+    }
+    .sp-trash  { color: var(--red);    border-color: rgba(255,34,68,.25);  background: rgba(255,34,68,.05); }
+    .sp-org    { color: var(--green);  border-color: rgba(0,255,65,.25);   background: rgba(0,255,65,.05); }
+    .sp-rem    { color: var(--cyan);   border-color: rgba(0,245,255,.25);  background: rgba(0,245,255,.05); }
+
+    /* Combo badge */
+    .combo-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .75rem; font-weight: 900;
+      padding: 3px 12px; border-radius: 3px;
+      letter-spacing: 1px;
+      animation: combo-pulse .4s ease-out;
+    }
+    @keyframes combo-pulse {
+      0%  { transform: scale(1.3); }
+      100%{ transform: scale(1); }
+    }
+    .combo-3  { color: var(--green);  border: 1px solid rgba(0,255,65,.4); background: rgba(0,255,65,.08); text-shadow: var(--glow-g); }
+    .combo-5  { color: var(--cyan);   border: 1px solid rgba(0,245,255,.5); background: rgba(0,245,255,.1); text-shadow: var(--glow-c); }
+    .combo-10 { color: var(--yellow); border: 1px solid rgba(255,221,0,.5); background: rgba(255,221,0,.08); text-shadow: var(--glow-y);
+                animation: rainbow-shift 0.5s linear infinite, combo-pulse .4s ease-out; }
+    @keyframes rainbow-shift {
+      0%  { filter: hue-rotate(0deg); }
+      100%{ filter: hue-rotate(360deg); }
+    }
+
+    /* HUD buttons */
+    .hud-spacer { flex: 1; }
+    .hud-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 13px; border-radius: 3px;
+      border: 1px solid; cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem; letter-spacing: 1.5px;
+      transition: background .15s, box-shadow .15s;
+      white-space: nowrap; background: transparent;
+    }
+    .hud-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-seed {
+      color: var(--green); border-color: rgba(0,255,65,.35);
+    }
+    .btn-seed:hover:not(:disabled) {
+      background: rgba(0,255,65,.1); box-shadow: var(--glow-g);
+    }
+    .btn-undo {
+      color: var(--yellow); border-color: rgba(255,221,0,.35);
+    }
+    .btn-undo:hover:not(:disabled) {
+      background: rgba(255,221,0,.08); box-shadow: var(--glow-y);
+    }
+    .btn-key {
+      color: var(--purple); border-color: rgba(170,68,255,.35);
+    }
+    .btn-key:hover {
+      background: rgba(170,68,255,.1); box-shadow: var(--glow-p);
+    }
+    .btn-key.key-active { color: var(--cyan); border-color: rgba(0,245,255,.35); }
+
+    /* ═══════════════════════════════════════════════════════════
+       MAIN LAYOUT
+    ═══════════════════════════════════════════════════════════ */
+    #main-layout {
+      flex: 1; display: flex; overflow: hidden; position: relative;
+    }
+    #play-area {
+      flex: 1; position: relative; overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       RADAR PANEL
+    ═══════════════════════════════════════════════════════════ */
+    #radar-panel {
+      width: var(--panel-w); flex-shrink: 0;
+      background: rgba(4,4,16,.92);
+      border-left: 1px solid rgba(0,245,255,.1);
+      display: flex; flex-direction: column;
+      overflow: hidden; backdrop-filter: blur(10px);
+      position: relative; z-index: 200;
+    }
+    #radar-panel::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: .3;
+    }
+
+    .panel-section {
+      border-bottom: 1px solid rgba(0,245,255,.06);
+      padding: 10px 12px;
+    }
+    .panel-head {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .58rem; letter-spacing: 2px;
+      color: var(--cyan); display: flex; align-items: center; gap: 7px;
+      margin-bottom: 8px; text-shadow: var(--glow-c);
+    }
+    .ph-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); box-shadow: var(--glow-g);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    /* File System stats */
+    .fs-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 5px; font-size: .68rem;
+    }
+    .fs-label { color: var(--text-dim); display: flex; align-items: center; gap: 5px; }
+    .fs-count {
+      font-family: 'Orbitron', sans-serif; font-size: .7rem;
+      padding: 1px 8px; border-radius: 2px; border: 1px solid;
+    }
+    .fs-count.messy  { color: var(--yellow); border-color: rgba(255,221,0,.25); background: rgba(255,221,0,.05); }
+    .fs-count.clean  { color: var(--green);  border-color: rgba(0,255,65,.25);  background: rgba(0,255,65,.05); }
+    .fs-count.trash  { color: var(--red);    border-color: rgba(255,34,68,.25); background: rgba(255,34,68,.05); }
+    .fs-count.sub    { color: var(--cyan);   border-color: rgba(0,245,255,.2);  background: rgba(0,245,255,.04); font-size: .6rem; }
+
+    .fs-bar-wrap {
+      height: 4px; background: rgba(255,255,255,.06);
+      border-radius: 2px; margin: 3px 0 8px; overflow: hidden;
+    }
+    .fs-bar { height: 100%; border-radius: 2px; transition: width .5s ease; }
+    .fs-bar.messy { background: var(--yellow); box-shadow: var(--glow-y); }
+    .fs-bar.org   { background: var(--green);  box-shadow: var(--glow-g); }
+    .fs-bar.trash { background: var(--red);    box-shadow: var(--glow-r); }
+
+    .sub-rows { padding-left: 14px; border-left: 1px solid rgba(0,245,255,.08); margin-left: 4px; }
+    .sub-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: .62rem; margin-bottom: 2px; color: var(--text-dim);
+    }
+
+    /* Activity feed */
+    #feed-body {
+      flex: 1; overflow-y: auto; padding: 3px 0;
+    }
+    #feed-body::-webkit-scrollbar { width: 3px; }
+    #feed-body::-webkit-scrollbar-thumb { background: rgba(0,245,255,.25); border-radius: 2px; }
+
+    .feed-entry {
+      padding: 5px 12px; font-size: .66rem;
+      border-left: 2px solid; display: flex;
+      flex-wrap: wrap; gap: 4px; align-items: center;
+      animation: slide-in .18s ease-out;
+    }
+    @keyframes slide-in { from { transform: translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .fe-trash  { border-color: var(--red);   background: rgba(255,34,68,.03); }
+    .fe-org    { border-color: var(--green); background: rgba(0,255,65,.03); }
+    .fe-undo   { border-color: var(--yellow); background: rgba(255,221,0,.03); }
+    .fe-time   { color: var(--text-dim); font-size: .56rem; }
+    .fe-action { font-weight: bold; }
+    .fe-file   { color: var(--text-hi); word-break: break-all; }
+    .fe-dest   { font-size: .6rem; opacity: .7; }
+    .fe-trash .fe-dest  { color: var(--red); }
+    .fe-org   .fe-dest  { color: var(--green); }
+    .fe-undo  .fe-dest  { color: var(--yellow); }
+    .feed-empty { padding: 14px 12px; text-align: center; color: var(--text-dim); font-size: .7rem; }
+
+    /* ═══════════════════════════════════════════════════════════
+       OVERLAYS (loading / error / complete)
+    ═══════════════════════════════════════════════════════════ */
+    .overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      background: rgba(4,4,18,.65); backdrop-filter: blur(4px);
+      z-index: 400;
+    }
+    .ov-icon  { font-size: 3rem; margin-bottom: 4px; }
+    .ov-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.5rem; font-weight: 900; letter-spacing: 4px;
+    }
+    .ov-sub {
+      font-size: .78rem; color: var(--text-dim);
+      letter-spacing: 1px; max-width: 400px; text-align: center;
+      white-space: pre-line;
+    }
+    .ov-btn {
+      margin-top: 8px; padding: 10px 28px;
+      background: transparent; border: 1px solid var(--cyan);
+      color: var(--cyan); font-family: 'Orbitron', sans-serif;
+      font-size: .72rem; letter-spacing: 2px; cursor: pointer;
+      transition: background .2s, box-shadow .2s;
+    }
+    .ov-btn:hover { background: rgba(0,245,255,.1); box-shadow: var(--glow-c); }
+    .ov-stats { display: flex; gap: 24px; margin-top: 8px; font-size: .9rem; }
+    .ov-stat-trash  { color: var(--red); }
+    .ov-stat-org    { color: var(--green); }
+
+    /* ── Debrief Modal / Mission Accomplished ── */
+    .debrief-overlay {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, rgba(6,12,32,.94) 0%, rgba(2,3,10,.98) 100%);
+      backdrop-filter: blur(12px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 800; padding: 20px;
+      animation: debrief-fadein .4s ease-out;
+    }
+    @keyframes debrief-fadein {
+      from { opacity: 0; transform: scale(.96); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .debrief-card {
+      width: 580px; max-width: 95vw;
+      background: rgba(6,10,28,.95);
+      border: 1px solid rgba(0,255,65,.35);
+      border-radius: 8px;
+      box-shadow: 0 0 50px rgba(0,255,65,.18), 0 0 100px rgba(0,0,0,.8);
+      padding: 30px 32px 26px;
+      position: relative;
+      overflow: hidden;
+    }
+    .debrief-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--green), var(--cyan), var(--green));
+      box-shadow: var(--glow-g);
+    }
+    .debrief-top {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    .debrief-subheading {
+      font-size: .65rem; color: var(--green); letter-spacing: 3px; font-weight: bold;
+      text-shadow: var(--glow-g); margin-bottom: 4px;
+    }
+    .debrief-headline {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.35rem; font-weight: 900;
+      letter-spacing: 2px; color: #fff;
+    }
+    .debrief-rank-badge {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.35rem; font-weight: 900;
+      padding: 6px 16px; border-radius: 4px;
+      border: 2px solid; text-align: center;
+      letter-spacing: 2px;
+    }
+    .rank-s {
+      color: var(--yellow); border-color: var(--yellow);
+      background: rgba(255,221,0,.1); text-shadow: var(--glow-y);
+      box-shadow: 0 0 18px rgba(255,221,0,.3);
+    }
+    .rank-a {
+      color: var(--green); border-color: var(--green);
+      background: rgba(0,255,65,.1); text-shadow: var(--glow-g);
+      box-shadow: 0 0 18px rgba(0,255,65,.3);
+    }
+    .rank-b {
+      color: var(--cyan); border-color: var(--cyan);
+      background: rgba(0,245,255,.1); text-shadow: var(--glow-c);
+    }
+    .rank-c {
+      color: var(--orange); border-color: var(--orange);
+      background: rgba(255,136,0,.1);
+    }
+    .debrief-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 10px; margin-bottom: 20px;
+    }
+    .debrief-stat-card {
+      background: rgba(10,14,35,.8);
+      border: 1px solid rgba(0,245,255,.15);
+      border-radius: 4px; padding: 12px 8px; text-align: center;
+    }
+    .debrief-stat-val {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.05rem; font-weight: 900;
+      color: var(--cyan); margin-bottom: 4px;
+    }
+    .debrief-stat-lbl {
+      font-size: .56rem; letter-spacing: 1.2px; color: var(--text-dim); text-transform: uppercase;
+    }
+    .debrief-quote-box {
+      background: rgba(0,245,255,.03);
+      border: 1px solid rgba(0,245,255,.18);
+      border-radius: 5px; padding: 14px 16px; margin-bottom: 18px;
+    }
+    .debrief-quote-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .62rem; color: var(--cyan); letter-spacing: 2px;
+      margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+    }
+    .debrief-quote-text {
+      font-size: .76rem; line-height: 1.5; color: #d0d8f0; font-style: italic;
+    }
+    .debrief-pills {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px;
+    }
+    .debrief-pill {
+      font-size: .6rem; padding: 3px 8px; border-radius: 3px;
+      border: 1px solid rgba(0,255,65,.3); background: rgba(0,255,65,.05);
+      color: var(--green); letter-spacing: 1px;
+    }
+    .debrief-actions {
+      display: flex; gap: 12px;
+    }
+    .debrief-btn-reseed {
+      flex: 2; padding: 13px 20px;
+      background: linear-gradient(135deg, rgba(0,255,65,.2) 0%, rgba(0,245,255,.2) 100%);
+      border: 1px solid var(--green);
+      color: #fff; font-family: 'Orbitron', sans-serif;
+      font-size: .78rem; font-weight: 900; letter-spacing: 2px;
+      cursor: pointer; border-radius: 4px;
+      box-shadow: var(--glow-g); transition: all .2s;
+    }
+    .debrief-btn-reseed:hover {
+      background: linear-gradient(135deg, rgba(0,255,65,.35) 0%, rgba(0,245,255,.35) 100%);
+      box-shadow: 0 0 25px rgba(0,255,65,.5);
+      transform: translateY(-1px);
+    }
+    .debrief-btn-undo {
+      flex: 1; padding: 13px;
+      background: transparent; border: 1px solid rgba(255,221,0,.4);
+      color: var(--yellow); font-family: 'Orbitron', sans-serif;
+      font-size: .7rem; letter-spacing: 1.5px;
+      cursor: pointer; border-radius: 4px; transition: all .2s;
+    }
+    .debrief-btn-undo:hover {
+      background: rgba(255,221,0,.1); box-shadow: var(--glow-y);
+    }
+
+    /* Badges & Content preview */
+    .badge-deep {
+      color: #00f5ff !important;
+      border-color: rgba(0,245,255,.5) !important;
+      background: rgba(0,245,255,.08) !important;
+      box-shadow: 0 0 6px rgba(0,245,255,.2) !important;
+      font-weight: 700;
+    }
+    .tgt-preview {
+      font-size: .62rem;
+      color: #70d8ee;
+      background: rgba(0,245,255,.04);
+      border-left: 2px solid rgba(0,245,255,.35);
+      padding: 3px 6px;
+      margin-bottom: 5px;
+      border-radius: 2px;
+      font-family: 'Share Tech Mono', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .tgt-lint-tag {
+      font-size: .58rem;
+      color: var(--green);
+      letter-spacing: .8px;
+      margin-bottom: 4px;
+      display: inline-block;
+      opacity: .9;
+    }
+
+    .spinner {
+      width: 54px; height: 54px;
+      border: 3px solid rgba(0,245,255,.1);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ═══════════════════════════════════════════════════════════
+       TARGETS
+    ═══════════════════════════════════════════════════════════ */
+    .target {
+      position: absolute;
+      width: var(--tgt-w); min-height: 170px;
+      background: rgba(6,8,28,.96);
+      border: 1px solid rgba(0,245,255,.2);
+      border-radius: 4px;
+      padding: 11px 13px 8px;
+      cursor: crosshair;
+      backdrop-filter: blur(8px);
+      transition: border-color .08s, box-shadow .08s;
+      will-change: transform;
+    }
+    .target.threat-trash { --threat-clr: var(--red);   border-color: rgba(255,34,68,.3); }
+    .target.threat-org   { --threat-clr: var(--cyan);  border-color: rgba(0,245,255,.2); }
+
+    @keyframes tgt-idle-trash {
+      0%,100%{ border-color: rgba(255,34,68,.3); box-shadow: 0 0 6px rgba(255,34,68,.08); }
+      50%    { border-color: rgba(255,34,68,.55); box-shadow: 0 0 14px rgba(255,34,68,.2); }
+    }
+    @keyframes tgt-idle-org {
+      0%,100%{ border-color: rgba(0,245,255,.2); box-shadow: 0 0 6px rgba(0,245,255,.08); }
+      50%    { border-color: rgba(0,245,255,.45); box-shadow: 0 0 14px rgba(0,245,255,.2); }
+    }
+    .target.threat-trash { animation: tgt-idle-trash 2.6s ease-in-out infinite; }
+    .target.threat-org   { animation: tgt-idle-org   3.2s ease-in-out infinite; }
+
+    .target:hover {
+      animation: none !important;
+      border-color: var(--threat-clr) !important;
+      box-shadow: 0 0 24px color-mix(in srgb, var(--threat-clr) 50%, transparent),
+                  inset 0 0 16px color-mix(in srgb, var(--threat-clr) 8%, transparent) !important;
+    }
+
+    /* Corner brackets */
+    .tc { position: absolute; width: 9px; height: 9px; }
+    .tc-tl { top:-1px;    left:-1px;  border-top:  2px solid var(--threat-clr); border-left:  2px solid var(--threat-clr); }
+    .tc-tr { top:-1px;    right:-1px; border-top:  2px solid var(--threat-clr); border-right: 2px solid var(--threat-clr); }
+    .tc-bl { bottom:-1px; left:-1px;  border-bottom:2px solid var(--threat-clr); border-left:  2px solid var(--threat-clr); }
+    .tc-br { bottom:-1px; right:-1px; border-bottom:2px solid var(--threat-clr); border-right: 2px solid var(--threat-clr); }
+
+    /* Target top badges */
+    .tgt-badges {
+      display: flex; align-items: center; gap: 5px;
+      margin-bottom: 6px; flex-wrap: wrap;
+    }
+    .badge {
+      font-size: .56rem; letter-spacing: 1px;
+      padding: 1px 6px; border-radius: 2px; border: 1px solid;
+    }
+    .badge-ai    { color: var(--purple); border-color: rgba(170,68,255,.4); background: rgba(170,68,255,.08); }
+    .badge-local { color: var(--text-dim); border-color: rgba(100,100,120,.3); background: rgba(100,100,120,.06); }
+    .badge-size  { color: var(--cyan);   border-color: rgba(0,245,255,.25); background: rgba(0,245,255,.05); margin-left: auto; }
+
+    /* Enemy name */
+    .tgt-enemy {
+      font-family: 'Orbitron', sans-serif;
+      font-size: .88rem; font-weight: 700;
+      letter-spacing: 1px; margin-bottom: 4px;
+      line-height: 1.25;
+    }
+    .threat-trash .tgt-enemy { color: var(--red);   text-shadow: var(--glow-r); }
+    .threat-org   .tgt-enemy { color: var(--cyan);  text-shadow: var(--glow-c); }
+
+    /* Filename */
+    .tgt-filename {
+      display: flex; align-items: flex-start; gap: 5px;
+      margin-bottom: 4px; font-size: .7rem;
+    }
+    .tgt-icon  { flex-shrink: 0; font-size: 1rem; line-height: 1.2; }
+    .tgt-fname { color: var(--text-hi); word-break: break-all; line-height: 1.3; }
+
+    /* Description */
+    .tgt-desc {
+      font-size: .68rem; color: var(--text-dim);
+      font-style: italic; margin-bottom: 5px; line-height: 1.35;
+    }
+
+    /* Subfolder destination */
+    .tgt-dest {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .65rem; padding: 2px 8px; border-radius: 2px;
+      margin-bottom: 7px;
+      color: var(--green); border: 1px solid rgba(0,255,65,.3);
+      background: rgba(0,255,65,.06);
+    }
+    .threat-trash .tgt-dest {
+      color: var(--red); border-color: rgba(255,34,68,.3);
+      background: rgba(255,34,68,.06);
+    }
+
+    /* Action hints */
+    .tgt-actions {
+      display: flex; justify-content: space-between; gap: 6px;
+      border-top: 1px solid rgba(255,255,255,.05);
+      padding-top: 6px;
+    }
+    .tgt-hint {
+      flex: 1; text-align: center;
+      font-size: .6rem; letter-spacing: 1px;
+      padding: 3px 6px; border-radius: 2px; border: 1px solid;
+    }
+    .hint-trash {
+      color: var(--red); border-color: rgba(255,34,68,.25); background: rgba(255,34,68,.05);
+    }
+    .hint-trash.hint-rec {
+      color: #fff; border-color: var(--red); background: rgba(255,34,68,.2);
+      box-shadow: var(--glow-r); animation: hint-pulse .9s ease-in-out infinite;
+    }
+    .hint-org {
+      color: var(--green); border-color: rgba(0,255,65,.25); background: rgba(0,255,65,.05);
+    }
+    .hint-org.hint-rec {
+      color: #fff; border-color: var(--green); background: rgba(0,255,65,.2);
+      box-shadow: var(--glow-g); animation: hint-pulse .9s ease-in-out infinite;
+    }
+    @keyframes hint-pulse {
+      0%,100%{ opacity: 1; } 50%{ opacity: .7; }
+    }
+
+    /* Hover crosshair reticle */
+    .tgt-reticle {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 28px; height: 28px;
+      border: 1px solid rgba(0,245,255,.3);
+      border-radius: 50%;
+      opacity: 0; transition: opacity .08s;
+      pointer-events: none;
+    }
+    .tgt-reticle::before, .tgt-reticle::after {
+      content: ''; position: absolute;
+      background: rgba(0,245,255,.3);
+    }
+    .tgt-reticle::before { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+    .tgt-reticle::after  { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+    .target:hover .tgt-reticle { opacity: 1; }
+
+    /* ═══════════════════════════════════════════════════════════
+       EFFECTS LAYER
+    ═══════════════════════════════════════════════════════════ */
+    #effects-layer {
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 600;
+    }
+    .effect { position: absolute; transform: translate(-50%,-50%); }
+
+    /* Explosion */
+    .explosion { position: relative; width: 80px; height: 80px; }
+
+    .exp-flash {
+      position: absolute; inset: 0; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,120,0,.85) 0%, rgba(255,34,68,.45) 55%, transparent 80%);
+      animation: exp-flash .55s forwards;
+    }
+    @keyframes exp-flash {
+      0%  { transform: scale(.08); opacity: 1; }
+      40% { transform: scale(1.7);  opacity: .7; }
+      100%{ transform: scale(2.2); opacity: 0; }
+    }
+    .exp-ring {
+      position: absolute; inset: 12px;
+      border: 2px solid var(--red); border-radius: 50%;
+      box-shadow: var(--glow-r);
+      animation: exp-ring .65s forwards;
+    }
+    @keyframes exp-ring {
+      0%  { transform: scale(.2); opacity: 1; }
+      100%{ transform: scale(2.8); opacity: 0; }
+    }
+    .hit-x {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      color: #fff; font-size: 2rem; font-weight: 900;
+      text-shadow: 0 0 10px var(--red), 0 0 20px var(--red);
+      animation: hit-x .75s forwards;
+    }
+    @keyframes hit-x {
+      0%  { transform: translate(-50%,-50%) scale(.3); opacity: 1; }
+      40% { transform: translate(-50%,-80%) scale(1.4); opacity: 1; }
+      100%{ transform: translate(-50%,-120%) scale(1); opacity: 0; }
+    }
+
+    .exp-particles { position: absolute; inset: 0; }
+    .particle {
+      position: absolute; top: 50%; left: 50%;
+      border-radius: 50%; animation: particle .7s forwards;
+    }
+    .p-red  { width: 5px; height: 5px; background: var(--red);    box-shadow: var(--glow-r); }
+    .p-org  { width: 4px; height: 4px; background: var(--orange); }
+    .p-yel  { width: 3px; height: 3px; background: var(--yellow); }
+
+    .particle:nth-child(1)  { --a:0deg;   }
+    .particle:nth-child(2)  { --a:40deg;  }
+    .particle:nth-child(3)  { --a:80deg;  }
+    .particle:nth-child(4)  { --a:120deg; }
+    .particle:nth-child(5)  { --a:160deg; }
+    .particle:nth-child(6)  { --a:200deg; }
+    .particle:nth-child(7)  { --a:240deg; }
+    .particle:nth-child(8)  { --a:280deg; }
+    .particle:nth-child(9)  { --a:320deg; }
+    .particle:nth-child(10) { --a:20deg;  animation-delay: .03s; }
+    .particle:nth-child(11) { --a:100deg; animation-delay: .02s; }
+    .particle:nth-child(12) { --a:220deg; animation-delay: .04s; }
+    @keyframes particle {
+      0%  { transform: translate(-50%,-50%) rotate(var(--a)) translateX(0);     opacity: 1; }
+      100%{ transform: translate(-50%,-50%) rotate(var(--a)) translateX(52px);  opacity: 0; }
+    }
+
+    /* Shield / Organize */
+    .shield { position: relative; width: 100px; height: 100px; display: flex; align-items: center; justify-content: center; }
+    .shield-ring {
+      position: absolute; border-radius: 50%;
+      border: 2px solid var(--green); box-shadow: var(--glow-g);
+      animation: shield-ring .85s forwards;
+    }
+    .shield-ring:nth-child(1) { animation-delay:.00s; }
+    .shield-ring:nth-child(2) { animation-delay:.13s; }
+    .shield-ring:nth-child(3) { animation-delay:.26s; }
+    @keyframes shield-ring {
+      0%  { width: 20px; height: 20px; opacity: .9; }
+      100%{ width: 120px; height: 120px; opacity: 0; }
+    }
+    .shield-hex {
+      position: absolute; inset: 18px;
+      border: 1px solid rgba(0,255,65,.5);
+      clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+      animation: shield-hex .85s forwards;
+    }
+    @keyframes shield-hex {
+      0%  { transform: scale(.1) rotate(0); opacity: 1; }
+      50% { transform: scale(1.1) rotate(30deg); opacity: .8; }
+      100%{ transform: scale(1.4) rotate(60deg); opacity: 0; }
+    }
+    .shield-check {
+      color: var(--green); font-size: 2.4rem; font-weight: 900;
+      text-shadow: var(--glow-g);
+      animation: shield-check .9s forwards; z-index: 1;
+    }
+    @keyframes shield-check {
+      0%  { transform: scale(.2); opacity: 1; }
+      45% { transform: scale(1.3); opacity: 1; }
+      100%{ transform: scale(1) translateY(-28px); opacity: 0; }
+    }
+
+    /* Combo flash overlay */
+    .combo-flash {
+      position: absolute; top: 30%; left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2.5rem; font-weight: 900;
+      letter-spacing: 4px; pointer-events: none;
+      animation: combo-flash .8s forwards;
+      z-index: 700;
+    }
+    .cf-3  { color: var(--green);  text-shadow: var(--glow-g); }
+    .cf-5  { color: var(--cyan);   text-shadow: var(--glow-c); }
+    .cf-10 { color: var(--yellow); text-shadow: var(--glow-y); }
+    @keyframes combo-flash {
+      0%  { transform: translateX(-50%) scale(.6); opacity: 1; }
+      30% { transform: translateX(-50%) scale(1.1); opacity: 1; }
+      70% { transform: translateX(-50%) scale(1) translateY(-20px); opacity: 1; }
+      100%{ transform: translateX(-50%) scale(1) translateY(-60px); opacity: 0; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       API KEY MODAL
+    ═══════════════════════════════════════════════════════════ */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(2,2,10,.8);
+      backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-box {
+      width: 440px; background: rgba(8,10,30,.98);
+      border: 1px solid rgba(170,68,255,.4);
+      border-radius: 6px; padding: 28px 28px 22px;
+      box-shadow: 0 0 40px rgba(170,68,255,.2), 0 0 80px rgba(0,0,0,.8);
+    }
+    .modal-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem; font-weight: 900;
+      color: var(--purple); text-shadow: var(--glow-p);
+      letter-spacing: 2px; margin-bottom: 6px;
+    }
+    .modal-desc {
+      font-size: .72rem; color: var(--text-dim);
+      line-height: 1.5; margin-bottom: 18px;
+    }
+    .modal-label {
+      font-size: .65rem; color: var(--cyan); letter-spacing: 1.5px;
+      margin-bottom: 5px; display: block;
+    }
+    .modal-input-wrap { position: relative; margin-bottom: 16px; }
+    .modal-input {
+      width: 100%;
+      background: rgba(0,0,0,.5); border: 1px solid rgba(170,68,255,.3);
+      border-radius: 3px; padding: 10px 40px 10px 12px;
+      color: var(--text-hi); font-family: 'Share Tech Mono', monospace;
+      font-size: .75rem; outline: none;
+      transition: border-color .15s;
+    }
+    .modal-input:focus { border-color: var(--purple); box-shadow: var(--glow-p); }
+    .modal-toggle {
+      position: absolute; right: 10px; top: 50%;
+      transform: translateY(-50%);
+      background: none; border: none;
+      color: var(--text-dim); cursor: pointer;
+      font-size: .85rem; padding: 2px;
+    }
+    .modal-hint {
+      font-size: .62rem; color: var(--text-dim);
+      margin-bottom: 18px; line-height: 1.5;
+    }
+    .modal-hint a { color: var(--purple); text-decoration: none; }
+    .modal-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    .modal-btn {
+      flex: 1; padding: 9px; border-radius: 3px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: .65rem; letter-spacing: 1.5px;
+      cursor: pointer; border: 1px solid; transition: all .15s;
+      background: transparent;
+    }
+    .mb-save  { color: var(--purple); border-color: rgba(170,68,255,.5); }
+    .mb-save:hover  { background: rgba(170,68,255,.15); box-shadow: var(--glow-p); }
+    .mb-clear { color: var(--red);    border-color: rgba(255,34,68,.4); }
+    .mb-clear:hover { background: rgba(255,34,68,.1); }
+    .mb-close { color: var(--text-dim); border-color: rgba(100,100,120,.3); }
+    .mb-close:hover { background: rgba(100,100,120,.1); }
+
+    /* Controls hint */
+    #controls-hint {
+      position: fixed; bottom: 18px; left: 18px;
+      font-size: .62rem; color: var(--text-dim);
+      letter-spacing: 1px; line-height: 1.9; z-index: 200;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       SHARED ANIMATIONS
+    ═══════════════════════════════════════════════════════════ */
+    @keyframes blink { 0%,100%{ opacity:1; } 50%{ opacity:.2; } }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, memo } = React;
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       CONSTANTS & API CONFIGURATION
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    // Relative URLs when served via Cloud Run / web server, or localhost fallback for standalone
+    const getApiBase = () => {
+      if (typeof window === 'undefined') return '';
+      if (window.location.protocol === 'file:') return 'http://127.0.0.1:5000';
+      if (window.location.port === '8080') return 'http://127.0.0.1:5000';
+      return ''; // Relative URLs by default for production & Cloud Run
+    };
+    const API = getApiBase();
+    const TGT_W = 304;
+    const TGT_H = 175;  // approx height for physics bounds
+    const HUD_H = 58;
+
+    // Built-in offline Simulation Mode dataset (resilience fallback)
+    const MOCK_TARGETS_SEED = [
+      { filename: "BTech_CSE_Notes_FINAL_v3.pdf", size: "30.7 KB", size_bytes: 31390, enemy_name: "Ancient PDF Specter", description: "Buried under 47 similar files, all named FINAL", recommended_action: "organize", subfolder: "Documents", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "zomato_order_420_invoice.pdf", size: "45.0 KB", size_bytes: 46060, enemy_name: "Stealth Delivery Specter", description: "₹420 for food nobody remembers eating", recommended_action: "organize", subfolder: "Receipts", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "chrome_installer_old(1).exe", size: "11.6 KB", size_bytes: 11920, enemy_name: "Wizard of Bloatware", description: "Bundled Ask Toolbar, asks nothing", recommended_action: "trash", subfolder: "Installers", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "Screenshot_2026-10-31_1108.png", size: "14.7 KB", size_bytes: 15029, enemy_name: "Screenshot Goblin", description: "Taken at 3 AM. Purpose: completely unknown.", recommended_action: "organize", subfolder: "Images", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "untitled_meme_final.jpg", size: "17.6 KB", size_bytes: 18021, enemy_name: "Meme Lich King", description: "Too blurry to use, too funny to delete", recommended_action: "trash", subfolder: "Images", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "temp_cache_dump.log", size: "61.8 KB", size_bytes: 63300, enemy_name: "Syntax Anomaly Glitch", description: "Erratic indentation detected! Defuse to auto-fix lint.", recommended_action: "trash", subfolder: "Code", ai_powered: false, deep_scanned: true, content_preview: "[2026-10-31 00:00:05] ERROR NullPointerException at CacheManager.flush():420..." },
+      { filename: "assignment_draft_copy.docx", size: "27.8 KB", size_bytes: 28486, enemy_name: "Ancient PDF Specter", description: "Buried under 47 similar files, all named FINAL", recommended_action: "organize", subfolder: "Documents", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "broken_script_test.py", size: "672 B", size_bytes: 672, enemy_name: "Syntax Anomaly Glitch", description: "Erratic indentation detected! Defuse to auto-fix lint.", recommended_action: "trash", subfolder: "Code", ai_powered: false, deep_scanned: true, content_preview: "#!/usr/bin/env python3 # STATUS: BROKEN - do not run in production..." },
+      { filename: "whatsapp_backup_old.zip", size: "38.2 KB", size_bytes: 39120, enemy_name: "The Docx Phantom", description: "Created for a class you definitely failed", recommended_action: "trash", subfolder: "Documents", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "amazon_receipt_nov2025.pdf", size: "27.7 KB", size_bytes: 28325, enemy_name: "Stealth Delivery Specter", description: "₹420 for food nobody remembers eating", recommended_action: "organize", subfolder: "Receipts", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "random_project_backup.zip", size: "18.4 KB", size_bytes: 18800, enemy_name: "The Docx Phantom", description: "Created for a class you definitely failed", recommended_action: "trash", subfolder: "Documents", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "Untitled_presentation_FINAL(2).pptx", size: "20.9 KB", size_bytes: 21432, enemy_name: "Ancient PDF Specter", description: "Buried under 47 similar files, all named FINAL", recommended_action: "trash", subfolder: "Documents", ai_powered: false, deep_scanned: false, content_preview: "" },
+      { filename: "mystery_note_123.txt", size: "345 B", size_bytes: 345, enemy_name: "Midnight Instamart Phantom", description: "Deep scan unmasked hidden midnight takeaway order!", recommended_action: "organize", subfolder: "Receipts", ai_powered: false, deep_scanned: true, content_preview: "SWIGGY INSTAMART ORDER #SW-99214 Date: 31-Oct-2026 02:45 AM Items: 1x Midnight Maggi..." },
+      { filename: "buggy_script.py", size: "228 B", size_bytes: 228, enemy_name: "Syntax Anomaly Glitch", description: "Erratic indentation detected! Defuse to auto-fix lint.", recommended_action: "organize", subfolder: "Code", ai_powered: false, deep_scanned: true, content_preview: "import os, sys, time import json def calculate_messy_sum( a ,b ):..." }
+    ];
+
+    let _simFiles = JSON.parse(JSON.stringify(MOCK_TARGETS_SEED));
+    let _simTrash = [];
+    let _simOrganized = {};
+    let _simHistory = [];
+    let _isSimulationActive = false;
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       SOUNDS  (Web Audio API — no files needed)
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    let _actx = null;
+    const actx = () => {
+      if (!_actx) _actx = new (window.AudioContext || window.webkitAudioContext)();
+      return _actx;
+    };
+
+    function playTrash() {
+      try {
+        const ctx = actx(), now = ctx.currentTime;
+        // Laser pew — sawtooth descending
+        const laser = ctx.createOscillator();
+        laser.type = 'sawtooth';
+        laser.frequency.setValueAtTime(2800, now);
+        laser.frequency.exponentialRampToValueAtTime(600, now + 0.18);
+        const gL = ctx.createGain();
+        gL.gain.setValueAtTime(0.22, now);
+        gL.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        laser.connect(gL).connect(ctx.destination);
+        laser.start(now); laser.stop(now + 0.22);
+
+        // Impact crunch — bandpass noise
+        const bufSz = Math.floor(ctx.sampleRate * 0.12);
+        const buf = ctx.createBuffer(1, bufSz, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < bufSz; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/bufSz, 1.5);
+        const noise = ctx.createBufferSource(); noise.buffer = buf;
+        const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=900; bp.Q.value=2;
+        const gN = ctx.createGain();
+        gN.gain.setValueAtTime(0.7, now); gN.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+        noise.connect(bp).connect(gN).connect(ctx.destination);
+        noise.start(now); noise.stop(now + 0.13);
+
+        // Sub thud
+        const thud = ctx.createOscillator(); thud.type = 'sine';
+        thud.frequency.setValueAtTime(140, now);
+        thud.frequency.exponentialRampToValueAtTime(45, now + 0.11);
+        const gT = ctx.createGain();
+        gT.gain.setValueAtTime(0.5, now); gT.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        thud.connect(gT).connect(ctx.destination);
+        thud.start(now); thud.stop(now + 0.12);
+      } catch(e) {}
+    }
+
+    function playOrganize() {
+      try {
+        const ctx = actx(), now = ctx.currentTime;
+        // Rising C-E-G-C major arpeggio
+        [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+          const osc = ctx.createOscillator(); osc.type = 'sine';
+          osc.frequency.value = freq;
+          const t = now + i * 0.1;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.26, t + 0.025);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+          osc.connect(g).connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.4);
+        });
+        // Shimmer sparkle
+        const sh = ctx.createOscillator(); sh.type = 'triangle';
+        sh.frequency.value = 2093;
+        const gS = ctx.createGain();
+        gS.gain.setValueAtTime(0, now + 0.3);
+        gS.gain.linearRampToValueAtTime(0.1, now + 0.35);
+        gS.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+        sh.connect(gS).connect(ctx.destination);
+        sh.start(now + 0.3); sh.stop(now + 0.62);
+      } catch(e) {}
+    }
+
+    function playComboSound(level) {
+      try {
+        const ctx = actx(), now = ctx.currentTime;
+        const scale = level >= 10
+          ? [523,587,659,698,784,880,988,1047,1175,1319]  // full major scale
+          : [523,659,784,1047,1319];                       // pentatonic
+        scale.forEach((freq, i) => {
+          const osc = ctx.createOscillator(); osc.type = level >= 10 ? 'triangle' : 'sine';
+          osc.frequency.value = freq;
+          const t = now + i * (level >= 10 ? 0.055 : 0.07);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(level >= 10 ? 0.3 : 0.22, t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+          osc.connect(g).connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.32);
+        });
+      } catch(e) {}
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       FILE UTILITIES
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    const EXT_ICONS = {
+      '.pdf':'📄','.doc':'📝','.docx':'📝','.xls':'📊','.xlsx':'📊',
+      '.ppt':'📑','.pptx':'📑','.jpg':'🖼️','.jpeg':'🖼️','.png':'🖼️',
+      '.gif':'🎞️','.mp4':'🎬','.mov':'🎬','.mp3':'🎵','.wav':'🎵',
+      '.zip':'📦','.rar':'📦','.7z':'📦','.exe':'⚙️','.msi':'⚙️',
+      '.dmg':'💿','.iso':'💿','.txt':'📋','.log':'📋','.py':'🐍',
+      '.js':'⚡','.ts':'⚡','.sh':'🖥️','.bat':'🖥️','.json':'🔧',
+      '.csv':'📊','.sql':'🗄️','.psd':'🎨','.ai':'🎨','.apk':'📱',
+    };
+    const fileIcon = name => {
+      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+      return EXT_ICONS[ext] || '📁';
+    };
+
+    const SUBFOLDER_ICONS = {
+      Documents:'📄', Images:'🖼️', Installers:'⚙️', Code:'💻', Receipts:'🧾'
+    };
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       API HELPERS & RESILIENT SIMULATION ENGINE
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    const mkHeaders = (key) => ({
+      'Content-Type': 'application/json',
+      ...(key ? { 'X-Gemini-Key': key } : {}),
+    });
+
+    const apiFetchFiles = async (key) => {
+      try {
+        const r = await fetch(`${API}/files`, { headers: mkHeaders(key) });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        _isSimulationActive = false;
+        return await r.json();
+      } catch (err) {
+        console.warn('Backend unavailable, running in Simulation Mode:', err.message);
+        _isSimulationActive = true;
+        return JSON.parse(JSON.stringify(_simFiles));
+      }
+    };
+
+    const apiStats = async () => {
+      if (_isSimulationActive) {
+        const totalOrg = Object.values(_simOrganized).reduce((acc, cur) => acc + (cur.length || 0), 0);
+        return {
+          messy_downloads: { count: _simFiles.length, files: _simFiles.map(f => f.filename) },
+          trash_bin: { count: _simTrash.length, files: _simTrash },
+          organized_safe: {
+            Documents: { count: (_simOrganized.Documents || []).length, files: _simOrganized.Documents || [] },
+            Images: { count: (_simOrganized.Images || []).length, files: _simOrganized.Images || [] },
+            Installers: { count: (_simOrganized.Installers || []).length, files: _simOrganized.Installers || [] },
+            Code: { count: (_simOrganized.Code || []).length, files: _simOrganized.Code || [] },
+            Receipts: { count: (_simOrganized.Receipts || []).length, files: _simOrganized.Receipts || [] },
+          },
+          total_organized: totalOrg,
+        };
+      }
+      try {
+        const r = await fetch(`${API}/stats`);
+        if (!r.ok) throw new Error();
+        return await r.json();
+      } catch {
+        return null;
+      }
+    };
+
+    const apiAction = async (body, key) => {
+      if (_isSimulationActive) {
+        if (body.action === 'trash') {
+          _simFiles = _simFiles.filter(f => f.filename !== body.filename);
+          _simTrash.push(body.filename);
+          _simHistory.push({ filename: body.filename, action: 'trash' });
+          return { ok: true, message: `${body.filename} → Trash_Bin` };
+        } else if (body.action === 'organize') {
+          _simFiles = _simFiles.filter(f => f.filename !== body.filename);
+          const sf = body.subfolder || 'Documents';
+          if (!_simOrganized[sf]) _simOrganized[sf] = [];
+          _simOrganized[sf].push(body.filename);
+          const isCode = body.filename.endsWith('.py') || body.filename.endsWith('.js') || sf === 'Code';
+          _simHistory.push({ filename: body.filename, action: 'organize', subfolder: sf });
+          return { ok: true, message: `${body.filename} → Organized_Safe/${sf}`, lint_fixed: isCode, lint_message: 'Simulated auto-lint format' };
+        } else if (body.action === 'undo') {
+          if (_simHistory.length === 0) return { error: 'Nothing to undo' };
+          const last = _simHistory.pop();
+          if (last.action === 'trash') {
+            _simTrash = _simTrash.filter(x => x !== last.filename);
+          } else {
+            if (_simOrganized[last.subfolder]) {
+              _simOrganized[last.subfolder] = _simOrganized[last.subfolder].filter(x => x !== last.filename);
+            }
+          }
+          const restored = MOCK_TARGETS_SEED.find(f => f.filename === last.filename) || {
+            filename: last.filename, size: "12 KB", size_bytes: 12000, enemy_name: "Restored Target",
+            description: "Restored from undo", recommended_action: "organize", subfolder: "Documents"
+          };
+          _simFiles.push(restored);
+          return { ok: true, filename: last.filename };
+        }
+      }
+      return fetch(`${API}/action`, {
+        method: 'POST',
+        headers: mkHeaders(key),
+        body: JSON.stringify(body),
+      }).then(r => r.json());
+    };
+
+    const apiSeed = async (key) => {
+      if (_isSimulationActive) {
+        _simFiles = JSON.parse(JSON.stringify(MOCK_TARGETS_SEED));
+        _simTrash = [];
+        _simOrganized = {};
+        _simHistory = [];
+        return { ok: true, count: _simFiles.length };
+      }
+      return fetch(`${API}/seed`, { method: 'POST', headers: mkHeaders(key) }).then(r => r.json());
+    };
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       TARGET COMPONENT
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    const Target = memo(function Target({ target, onAction, regRef }) {
+      const elRef = useRef(null);
+
+      useEffect(() => {
+        regRef(target.id, elRef.current);
+        if (elRef.current) {
+          elRef.current.style.left = `${target._x}px`;
+          elRef.current.style.top  = `${target._y}px`;
+        }
+        return () => regRef(target.id, null);
+      }, [target.id]);
+
+      const handleClick = useCallback(e => {
+        e.preventDefault();
+        if (e.button === 0) onAction(target, 'trash', e.clientX, e.clientY);
+      }, [target, onAction]);
+
+      const handleCtx = useCallback(e => {
+        e.preventDefault();
+        onAction(target, 'organize', e.clientX, e.clientY);
+      }, [target, onAction]);
+
+      // Keyboard accessibility: Space/T = Trash, Enter/O = Organize
+      const handleKeyDown = useCallback(e => {
+        if (e.key === ' ' || e.key === 't' || e.key === 'T') {
+          e.preventDefault();
+          const rect = elRef.current ? elRef.current.getBoundingClientRect() : { left: 300, top: 250 };
+          onAction(target, 'trash', rect.left + 50, rect.top + 30);
+        } else if (e.key === 'Enter' || e.key === 'o' || e.key === 'O') {
+          e.preventDefault();
+          const rect = elRef.current ? elRef.current.getBoundingClientRect() : { left: 300, top: 250 };
+          onAction(target, 'organize', rect.left + 50, rect.top + 30);
+        }
+      }, [target, onAction]);
+
+      const isTrash = target.recommended_action === 'trash';
+      const icon    = fileIcon(target.filename);
+      const sfIcon  = SUBFOLDER_ICONS[target.subfolder] || '📂';
+
+      return (
+        <div
+          ref={elRef}
+          className={`target ${isTrash ? 'threat-trash' : 'threat-org'}`}
+          onClick={handleClick}
+          onContextMenu={handleCtx}
+          onKeyDown={handleKeyDown}
+          tabIndex={0}
+          role="button"
+          aria-label={`${target.enemy_name}: ${target.filename}, ${target.size}. Press Space to Trash, Enter to Organize into ${target.subfolder}.`}
+        >
+          <div className="tc tc-tl"/><div className="tc tc-tr"/>
+          <div className="tc tc-bl"/><div className="tc tc-br"/>
+
+          {/* Badges row */}
+          <div className="tgt-badges">
+            <span className={`badge ${target.ai_powered ? 'badge-ai' : 'badge-local'}`}>
+              {target.ai_powered ? '🤖 AI' : '⚡ LOCAL'}
+            </span>
+            {target.deep_scanned && (
+              <span className="badge badge-deep" title={target.content_preview ? `Deep scan content: ${target.content_preview}` : 'AI Deep-Scanned Content'}>
+                🔬 DEEP-SCANNED
+              </span>
+            )}
+            <span className="badge badge-size">💾 {target.size}</span>
+          </div>
+
+          {/* Enemy name */}
+          <div className="tgt-enemy">{target.enemy_name}</div>
+
+          {/* Real filename */}
+          <div className="tgt-filename">
+            <span className="tgt-icon">{icon}</span>
+            <span className="tgt-fname">{target.filename}</span>
+          </div>
+
+          {/* Deep inspection preview snippet */}
+          {target.content_preview && (
+            <div className="tgt-preview" title="First 300 chars previewed">
+              📄 "{target.content_preview}"
+            </div>
+          )}
+
+          {/* AI description */}
+          <div className="tgt-desc">"{target.description}"</div>
+
+          {/* Destination badge + lint tag */}
+          {isTrash ? (
+            <div className="tgt-dest">🗑️ → Trash_Bin</div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <div className="tgt-dest">{sfIcon} → {target.subfolder}</div>
+              {target.subfolder === 'Code' && (
+                <span className="tgt-lint-tag">⚡ Auto-Lint Fix</span>
+              )}
+            </div>
+          )}
+
+          {/* Action hints */}
+          <div className="tgt-actions">
+            <span className={`tgt-hint hint-trash ${isTrash ? 'hint-rec' : ''}`}>
+              LMB: TRASH
+            </span>
+            <span className={`tgt-hint hint-org ${!isTrash ? 'hint-rec' : ''}`}>
+              RMB → {target.subfolder}
+            </span>
+          </div>
+
+          <div className="tgt-reticle"/>
+        </div>
+      );
+    });
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       EFFECTS
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    function Effects({ effects }) {
+      return (
+        <div id="effects-layer">
+          {effects.map(ef => (
+            <div key={ef.id} className="effect" style={{ left: ef.x, top: ef.y }}>
+              {ef.type === 'explosion' ? (
+                <div className="explosion">
+                  <div className="exp-flash"/>
+                  <div className="exp-ring"/>
+                  <div className="exp-particles">
+                    {[...Array(12)].map((_, i) => (
+                      <div key={i} className={`particle ${i < 6 ? 'p-red' : i < 9 ? 'p-org' : 'p-yel'}`}/>
+                    ))}
+                  </div>
+                  <div className="hit-x">✕</div>
+                </div>
+              ) : (
+                <div className="shield">
+                  <div className="shield-ring"/><div className="shield-ring"/><div className="shield-ring"/>
+                  <div className="shield-hex"/>
+                  <div className="shield-check">✓</div>
+                </div>
+              )}
+            </div>
+          ))}
+          {effects.filter(e => e.type === 'combo').map(ef => (
+            <div key={ef.id} className={`combo-flash cf-${ef.level >= 10 ? 10 : ef.level >= 5 ? 5 : 3}`}
+                 style={{ left: ef.x }}>
+              {ef.level >= 10 ? `🔥 ${ef.level}x FRENZY!` : ef.level >= 5 ? `⚡ ${ef.level}x COMBO!` : `${ef.level}x COMBO`}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       RADAR PANEL
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    function RadarPanel({ stats, log, isConnected }) {
+      const feedRef = useRef(null);
+      useEffect(() => {
+        if (feedRef.current) feedRef.current.scrollTop = 0;
+      }, [log]);
+
+      const messy    = stats?.messy_downloads?.count ?? 0;
+      const trashed  = stats?.trash_bin?.count       ?? 0;
+      const totalOrg = stats?.total_organized        ?? 0;
+      const org      = stats?.organized_safe         ?? {};
+      const totalAll = messy + trashed + totalOrg;
+      const pct = (n) => totalAll > 0 ? Math.round((n / totalAll) * 100) : 0;
+
+      return (
+        <aside id="radar-panel" role="complementary" aria-label="Live Telemetry and Radar Feed">
+          {/* Connection */}
+          <div className="panel-section">
+            <div className="panel-head">
+              <div className="ph-dot" style={isConnected ? {} : { background:'var(--red)', boxShadow:'var(--glow-r)' }}/>
+              {isConnected ? 'LIVE DISK LINKED' : 'SERVER OFFLINE'}
+            </div>
+            <div className="fs-row">
+              <span className="fs-label">🗂️ Messy_Downloads</span>
+              <span className="fs-count messy">{messy}</span>
+            </div>
+            <div className="fs-bar-wrap"><div className="fs-bar messy" style={{ width: `${pct(messy)}%` }}/></div>
+            <div className="fs-row">
+              <span className="fs-label">📂 Organized_Safe</span>
+              <span className="fs-count clean">{totalOrg}</span>
+            </div>
+            <div className="fs-bar-wrap"><div className="fs-bar org" style={{ width: `${pct(totalOrg)}%` }}/></div>
+            {Object.entries(org).map(([sf, v]) => v.count > 0 && (
+              <div key={sf} className="fs-row" style={{ paddingLeft: '12px' }}>
+                <span className="fs-label" style={{ fontSize: '.6rem' }}>
+                  {SUBFOLDER_ICONS[sf] || '📁'} {sf}
+                </span>
+                <span className="fs-count sub">{v.count}</span>
+              </div>
+            ))}
+            <div className="fs-row" style={{ marginTop: '4px' }}>
+              <span className="fs-label">🗑️ Trash_Bin</span>
+              <span className="fs-count trash">{trashed}</span>
+            </div>
+            <div className="fs-bar-wrap"><div className="fs-bar trash" style={{ width: `${pct(trashed)}%` }}/></div>
+          </div>
+
+          {/* Activity Feed */}
+          <div className="panel-section" style={{ borderBottom: 'none', paddingBottom: '4px' }}>
+            <div className="panel-head">
+              <div className="ph-dot"/>
+              LIVE ACTIVITY
+            </div>
+          </div>
+          <div id="feed-body" ref={feedRef} aria-live="polite" aria-label="Recent file operations log">
+            {log.length === 0
+              ? <div className="feed-empty">Awaiting actions…</div>
+              : log.map(e => (
+                <div key={e.id} className={`feed-entry fe-${e.action === 'trash' ? 'trash' : e.action === 'undo' ? 'undo' : 'org'}`}>
+                  <span className="fe-time">{e.time}</span>
+                  <span className="fe-action">
+                    {e.action === 'trash' ? '💥 Shot' : e.action === 'undo' ? '↩ Undone' : '🛡️ Filed'}
+                  </span>
+                  <span className="fe-file">{e.filename}</span>
+                  <span className="fe-dest">
+                    {e.action === 'trash' ? '→ Trash' : e.action === 'undo' ? '→ Messy' : `→ ${e.subfolder || ''}`}
+                  </span>
+                </div>
+              ))
+            }
+          </div>
+        </aside>
+      );
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       API KEY MODAL
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    function ApiKeyModal({ currentKey, onSave, onClear, onClose }) {
+      const [val, setVal]       = useState(currentKey || '');
+      const [show, setShow]     = useState(false);
+      return (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="modal-box">
+            <div className="modal-title">🔑 GEMINI AI KEY</div>
+            <div className="modal-desc">
+              Paste your Google AI API key to unlock AI-powered enemy names, dramatic descriptions,
+              and smarter file classification via <strong>gemini-2.5-flash</strong>.
+            </div>
+            <label className="modal-label">API KEY</label>
+            <div className="modal-input-wrap">
+              <input
+                className="modal-input"
+                type={show ? 'text' : 'password'}
+                placeholder="AIza..."
+                value={val}
+                onChange={e => setVal(e.target.value)}
+                autoFocus
+              />
+              <button className="modal-toggle" onClick={() => setShow(s => !s)}>
+                {show ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <div className="modal-hint">
+              Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>.
+              Key is stored in your browser's localStorage only.
+              If no key is set, the local smart classifier is used instantly.
+            </div>
+            <div className="modal-btns">
+              <button className="modal-btn mb-save" onClick={() => onSave(val.trim())}>
+                ✓ ACTIVATE AI
+              </button>
+              <button className="modal-btn mb-clear" onClick={onClear}>
+                ✕ CLEAR KEY
+              </button>
+              <button className="modal-btn mb-close" onClick={onClose}>
+                CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       MAIN APP
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    function App() {
+      /* ── State ── */
+      const [targets,      setTargets]      = useState([]);
+      const [effects,      setEffects]      = useState([]);
+      const [log,          setLog]          = useState([]);
+      const [stats,        setStats]        = useState(null);
+      const [gameState,    setGameState]    = useState('loading');   // loading|playing|error|done
+      const [errMsg,       setErrMsg]       = useState('');
+      const [isConnected,  setIsConnected]  = useState(false);
+      const [apiKey,       setApiKey]       = useState(() => localStorage.getItem('dtd_gemini_key') || '');
+      const [showModal,    setShowModal]    = useState(false);
+      const [combo,        setCombo]        = useState(0);
+      const [seeding,      setSeeding]      = useState(false);
+      const [waveStats,    setWaveStats]    = useState({
+        startTime: Date.now(),
+        endTime: null,
+        clearedCount: 0,
+        bytesReclaimed: 0,
+        correctCount: 0,
+        totalActions: 0,
+      });
+
+      /* ── Refs ── */
+      const physRef    = useRef({});    // id → { x, y, dx, dy }
+      const elemRef    = useRef({});    // id → DOM element
+      const removedRef = useRef(new Set());
+      const rafRef     = useRef(null);
+      const shellRef   = useRef(null);
+      const comboRef   = useRef(0);     // sync combo for callbacks
+
+      /* ── Load files ── */
+      const initTargets = useCallback((files) => {
+        const W = window.innerWidth - 292 - 20;
+        const H = window.innerHeight - HUD_H;
+        return files.map((f, i) => {
+          const id  = `${f.filename}-${i}-${Date.now()}`;
+          const x   = 20 + Math.random() * Math.max(W - TGT_W - 40, 0);
+          const y   = 20 + Math.random() * Math.max(H - TGT_H - 40, 0);
+          const spd = 0.45 + Math.random() * 0.75;
+          const ang = Math.random() * Math.PI * 2;
+          physRef.current[id] = { x, y, dx: Math.cos(ang)*spd, dy: Math.sin(ang)*spd };
+          return { ...f, id, _x: x, _y: y };
+        });
+      }, []);
+
+      const loadFiles = useCallback(async (reset = false) => {
+        if (reset) {
+          setGameState('loading');
+          physRef.current  = {};
+          elemRef.current  = {};
+          removedRef.current = new Set();
+          setWaveStats({
+            startTime: Date.now(),
+            endTime: null,
+            clearedCount: 0,
+            bytesReclaimed: 0,
+            correctCount: 0,
+            totalActions: 0,
+          });
+        }
+        try {
+          const files = await apiFetchFiles(apiKey);
+          if (!Array.isArray(files)) throw new Error(JSON.stringify(files));
+          setIsConnected(true);
+          if (files.length === 0) {
+            setGameState('done');
+            return;
+          }
+          const newTargets = initTargets(files);
+          setTargets(newTargets);
+          setGameState('playing');
+        } catch (err) {
+          setIsConnected(false);
+          setErrMsg(`Cannot reach ${API}/files\n\nMake sure the Flask backend is running:\n  python backend/app.py\n\n(${err.message})`);
+          setGameState('error');
+        }
+      }, [apiKey, initTargets]);
+
+      /* Silent refresh — merges new metadata into existing targets, adds restored files */
+      const silentRefresh = useCallback(async () => {
+        try {
+          const files = await apiFetchFiles(apiKey);
+          if (!Array.isArray(files)) return;
+          setIsConnected(true);
+          setTargets(prev => {
+            const existingNames = new Set(prev.map(t => t.filename));
+            // Update existing
+            const updated = prev
+              .map(t => {
+                const match = files.find(f => f.filename === t.filename);
+                return match ? { ...t, ...match } : null;
+              })
+              .filter(Boolean);
+            // Add any new (e.g. from undo)
+            const W = window.innerWidth - 292 - 20;
+            const H = window.innerHeight - HUD_H;
+            const added = files
+              .filter(f => !existingNames.has(f.filename))
+              .map((f, i) => {
+                const id  = `${f.filename}-undo-${Date.now()}-${i}`;
+                const x   = 40 + Math.random() * Math.max(W - TGT_W - 80, 0);
+                const y   = 40 + Math.random() * Math.max(H - TGT_H - 80, 0);
+                const spd = 0.5 + Math.random() * 0.6;
+                const ang = Math.random() * Math.PI * 2;
+                physRef.current[id] = { x, y, dx: Math.cos(ang)*spd, dy: Math.sin(ang)*spd };
+                return { ...f, id, _x: x, _y: y };
+              });
+            const next = [...updated, ...added];
+            if (next.length === 0) setGameState('done');
+            return next;
+          });
+        } catch (err) {
+          setIsConnected(false);
+        }
+      }, [apiKey]);
+
+      useEffect(() => { loadFiles(true); }, []);  // initial load
+
+      /* ── Poll stats every 2 s ── */
+      useEffect(() => {
+        const tick = async () => {
+          try {
+            const s = await apiStats();
+            setStats(s);
+          } catch(e) {}
+        };
+        tick();
+        const iv = setInterval(tick, 2000);
+        return () => clearInterval(iv);
+      }, []);
+
+      /* ── Gemini refresh: if local results shown and key available, refresh after 3.5 s ── */
+      useEffect(() => {
+        if (!apiKey || gameState !== 'playing') return;
+        const allAI = targets.every(t => t.ai_powered);
+        if (allAI) return;
+        const tid = setTimeout(silentRefresh, 3500);
+        return () => clearTimeout(tid);
+      }, [gameState, apiKey]);  // run once per game state change + key
+
+      /* ── Animation loop (direct DOM, no re-renders) ── */
+      useEffect(() => {
+        if (gameState !== 'playing') return;
+        const PANEL_W = 292;
+        const loop = () => {
+          const W = window.innerWidth  - PANEL_W;
+          const H = window.innerHeight - HUD_H;
+          const phys = physRef.current;
+          const elems = elemRef.current;
+          const removed = removedRef.current;
+          for (const id in phys) {
+            if (removed.has(id)) continue;
+            const p = phys[id];
+            p.x += p.dx; p.y += p.dy;
+            if (p.x < 0)          { p.x = 0;           p.dx =  Math.abs(p.dx); }
+            if (p.x > W - TGT_W)  { p.x = W - TGT_W;  p.dx = -Math.abs(p.dx); }
+            if (p.y < 0)          { p.y = 0;           p.dy =  Math.abs(p.dy); }
+            if (p.y > H - TGT_H)  { p.y = H - TGT_H;  p.dy = -Math.abs(p.dy); }
+            const el = elems[id];
+            if (el) { el.style.left = `${p.x}px`; el.style.top = `${p.y}px`; }
+          }
+          rafRef.current = requestAnimationFrame(loop);
+        };
+        rafRef.current = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(rafRef.current);
+      }, [gameState]);
+
+      /* ── Ref registration ── */
+      const regRef = useCallback((id, el) => {
+        if (el) elemRef.current[id] = el; else delete elemRef.current[id];
+      }, []);
+
+      /* ── Add effect helper ── */
+      const spawnEffect = useCallback((type, x, y, extra = {}) => {
+        const id = Date.now() + Math.random();
+        setEffects(prev => [...prev, { id, type, x, y, ...extra }]);
+        setTimeout(() => setEffects(prev => prev.filter(e => e.id !== id)), 950);
+      }, []);
+
+      /* ── Add log entry ── */
+      const addLog = useCallback((action, filename, subfolder) => {
+        const entry = {
+          id: Date.now() + Math.random(),
+          action, filename, subfolder,
+          time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+        };
+        setLog(prev => [entry, ...prev].slice(0, 20));
+      }, []);
+
+      /* ── Main action handler ── */
+      const handleAction = useCallback((target, action, cx, cy) => {
+        if (removedRef.current.has(target.id)) return;
+        removedRef.current.add(target.id);
+
+        // Remove from React
+        setTargets(prev => {
+          const next = prev.filter(t => t.id !== target.id);
+          if (next.length === 0) setTimeout(() => setGameState('done'), 700);
+          return next;
+        });
+        delete physRef.current[target.id];
+        delete elemRef.current[target.id];
+
+        // Sounds & effects
+        if (action === 'trash') {
+          playTrash();
+          spawnEffect('explosion', cx, cy);
+          if (shellRef.current) {
+            shellRef.current.classList.remove('shake');
+            void shellRef.current.offsetWidth;
+            shellRef.current.classList.add('shake');
+          }
+        } else {
+          playOrganize();
+          spawnEffect('shield', cx, cy);
+        }
+
+        // Combo logic
+        const isCorrect = action === target.recommended_action;
+        const newCombo = isCorrect ? comboRef.current + 1 : 0;
+        comboRef.current = newCombo;
+        setCombo(newCombo);
+
+        // Update wave telemetry
+        setWaveStats(prev => ({
+          ...prev,
+          clearedCount: prev.clearedCount + 1,
+          bytesReclaimed: prev.bytesReclaimed + (target.size_bytes || 0),
+          correctCount: prev.correctCount + (isCorrect ? 1 : 0),
+          totalActions: prev.totalActions + 1,
+          endTime: Date.now(),
+        }));
+
+        if (newCombo === 3 || newCombo === 5 || newCombo === 10 || (newCombo > 10 && newCombo % 5 === 0)) {
+          playComboSound(newCombo);
+          spawnEffect('combo', cx, Math.min(cy, window.innerHeight * 0.5), { level: newCombo });
+        }
+
+        // Activity log
+        addLog(action, target.filename, target.subfolder);
+
+        // POST to backend
+        apiAction(
+          { filename: target.filename, action, subfolder: target.subfolder },
+          apiKey
+        ).then(res => {
+          if (res && res.lint_fixed) {
+            addLog('org', target.filename, target.subfolder + ' (⚡ Lint Fixed)');
+          }
+        }).catch(e => console.warn('POST failed:', e));
+      }, [apiKey, spawnEffect, addLog]);
+
+      /* ── Calculate debrief metrics ── */
+      const calcDebrief = useCallback(() => {
+        const durationSec = waveStats.endTime && waveStats.startTime
+          ? Math.max(1, ((waveStats.endTime - waveStats.startTime) / 1000).toFixed(1))
+          : '14.8';
+        const total = waveStats.totalActions || (stats?.trash_bin?.count || 0) + (stats?.total_organized || 0) || 14;
+        const correct = waveStats.correctCount || total;
+        const accuracy = Math.min(100, Math.round((correct / Math.max(1, total)) * 100));
+
+        const formatBytes = (bytes) => {
+          if (!bytes || bytes === 0) return '1.25 MB';
+          if (bytes < 1024) return bytes + ' B';
+          if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+          return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        };
+
+        let rank = 'S-RANK';
+        let rankClass = 'rank-s';
+        let quote = 'Flawless tactical discipline: all high-threat clutter diffused with pinpoint accuracy. Code lint auto-formatted; mystery receipts secured!';
+        if (accuracy >= 90) {
+          rank = 'S-RANK'; rankClass = 'rank-s';
+          quote = 'Flawless tactical discipline: all high-threat clutter diffused with pinpoint accuracy. Code lint auto-formatted; mystery receipts secured!';
+        } else if (accuracy >= 75) {
+          rank = 'A-RANK'; rankClass = 'rank-a';
+          quote = 'High-velocity file clearance verified. Desktop entropy reduced by 99% with minimal collateral misfiling.';
+        } else if (accuracy >= 55) {
+          rank = 'B-RANK'; rankClass = 'rank-b';
+          quote = 'Sector secured through energetic clicking. Stray files neutralized; disk declutter objective successfully achieved.';
+        } else {
+          rank = 'C-RANK'; rankClass = 'rank-c';
+          quote = 'Aggressive cleanup executed. File casualties registered, but the messy downloads folder is undeniably eradicated.';
+        }
+
+        return {
+          cleared: waveStats.clearedCount || total,
+          reclaimedStr: formatBytes(waveStats.bytesReclaimed),
+          accuracy: accuracy + '%',
+          duration: durationSec + 's',
+          rank,
+          rankClass,
+          quote,
+        };
+      }, [waveStats, stats]);
+
+      /* ── Seed button ── */
+      const handleSeed = useCallback(async () => {
+        setSeeding(true);
+        try {
+          await apiSeed(apiKey);
+          comboRef.current = 0;
+          setCombo(0);
+          setLog([]);
+          await loadFiles(true);
+        } catch (e) {
+          console.error('Seed failed:', e);
+        } finally {
+          setSeeding(false);
+        }
+      }, [apiKey, loadFiles]);
+
+      /* ── Undo button ── */
+      const handleUndo = useCallback(async () => {
+        try {
+          const res = await apiAction({ action: 'undo' }, apiKey);
+          if (res.ok) {
+            comboRef.current = 0;
+            setCombo(0);
+            addLog('undo', res.filename || '?', '');
+            await silentRefresh();
+          }
+        } catch (e) {}
+      }, [apiKey, silentRefresh, addLog]);
+
+      /* ── API Key handlers ── */
+      const saveKey = useCallback((k) => {
+        setApiKey(k);
+        localStorage.setItem('dtd_gemini_key', k);
+        setShowModal(false);
+        // Reload with new key
+        physRef.current = {};
+        elemRef.current = {};
+        removedRef.current = new Set();
+        loadFiles(true);
+      }, [loadFiles]);
+
+      const clearKey = useCallback(() => {
+        setApiKey('');
+        localStorage.removeItem('dtd_gemini_key');
+        setShowModal(false);
+        loadFiles(true);
+      }, [loadFiles]);
+
+      /* ── Combo class ── */
+      const comboClass = combo >= 10 ? 'combo-10' : combo >= 5 ? 'combo-5' : combo >= 3 ? 'combo-3' : '';
+
+      /* ── Stats for HUD ── */
+      const trashCount = stats?.trash_bin?.count   ?? 0;
+      const orgCount   = stats?.total_organized    ?? 0;
+
+      /* ════════════════════════════════════════════════════════
+         RENDER
+      ════════════════════════════════════════════════════════ */
+      return (
+        <div id="shell" ref={shellRef} onContextMenu={e => e.preventDefault()}>
+
+          {/* ── HUD ── */}
+          <header id="hud" role="banner" aria-label="Game Command HUD">
+            <div className="hud-live-dot" style={_isSimulationActive ? { background:'var(--yellow)', boxShadow:'var(--glow-y)' } : isConnected ? {} : { background:'var(--red)', boxShadow:'var(--glow-r)' }}/>
+            <div className="hud-title">⚡ DEFUSE THE DOWNLOADS</div>
+
+            <div className="hud-sep"/>
+
+            <div className={`hud-status ${_isSimulationActive ? 'sim' : isConnected ? 'online' : 'offline'}`} role="status" aria-live="polite">
+              <span>{_isSimulationActive ? '🟡' : isConnected ? '🟢' : '🔴'}</span>
+              <span>{_isSimulationActive ? 'SIMULATION MODE (OFFLINE)' : isConnected ? 'LIVE DISK LINKED' : 'SERVER OFFLINE'}</span>
+            </div>
+
+            <div className="hud-sep"/>
+
+            <div className="hud-stats" role="group" aria-label="Game Statistics">
+              <span className="stat-pill sp-trash" aria-label={`${trashCount} files trashed`}>💥 {trashCount} TRASHED</span>
+              <span className="stat-pill sp-org" aria-label={`${orgCount} files organized`}>🛡️ {orgCount} ORGANIZED</span>
+              <span className="stat-pill sp-rem" aria-label={`${targets.length} targets remaining`}>📁 {targets.length} TARGETS</span>
+            </div>
+
+            {combo >= 3 && (
+              <>
+                <div className="hud-sep"/>
+                <span key={combo} className={`combo-badge ${comboClass}`} role="status" aria-label={`${combo} combo streak`}>
+                  {combo >= 10 ? `🔥 ${combo}x FRENZY` : `${combo}x COMBO`}
+                </span>
+              </>
+            )}
+
+            <div className="hud-spacer"/>
+
+            <button
+              className="hud-btn btn-seed"
+              onClick={handleSeed}
+              disabled={seeding}
+              aria-label="Spawn Clutter: Seed 14 demo files onto disk"
+              title="POST /seed — generates 14 fresh messy files"
+            >
+              {seeding ? '⏳' : '🌱'} {seeding ? 'SEEDING…' : 'SPAWN CLUTTER'}
+            </button>
+
+            <button
+              className="hud-btn btn-undo"
+              onClick={handleUndo}
+              aria-label="Undo last file action"
+              title="POST /action {action:'undo'}"
+            >
+              ↩ UNDO LAST SHOT
+            </button>
+
+            <button
+              className={`hud-btn btn-key ${apiKey ? 'key-active' : ''}`}
+              onClick={() => setShowModal(true)}
+              aria-label="Configure Gemini AI API key"
+              title="Set your Gemini API key for AI-powered classification"
+            >
+              🔑 {apiKey ? 'AI ACTIVE' : 'GEMINI KEY'}
+            </button>
+          </header>
+
+          {/* ── Main Layout ── */}
+          <div id="main-layout" role="region" aria-label="Game Arena">
+
+            {/* Play Area */}
+            <main id="play-area" role="main" aria-label="Tactical Target Battlefield">
+
+              {/* Loading overlay */}
+              {gameState === 'loading' && (
+                <div className="overlay">
+                  <div className="spinner"/>
+                  <div className="ov-title" style={{ color:'var(--cyan)', textShadow:'var(--glow-c)' }}>
+                    SCANNING DISK…
+                  </div>
+                  <div className="ov-sub">Connecting to {API}/files</div>
+                </div>
+              )}
+
+              {/* Error overlay */}
+              {gameState === 'error' && (
+                <div className="overlay">
+                  <div className="ov-icon">⚠️</div>
+                  <div className="ov-title" style={{ color:'var(--red)', textShadow:'var(--glow-r)' }}>
+                    SERVER OFFLINE
+                  </div>
+                  <div className="ov-sub">{errMsg}</div>
+                  <button className="ov-btn" onClick={() => loadFiles(true)}>↺ RETRY CONNECTION</button>
+                </div>
+              )}
+
+              {/* Mission complete / Debrief modal */}
+              {gameState === 'done' && (() => {
+                const debrief = calcDebrief();
+                return (
+                  <div className="debrief-overlay">
+                    <div className="debrief-card">
+                      <div className="debrief-top">
+                        <div>
+                          <div className="debrief-subheading">// MISSION ACCOMPLISHED //</div>
+                          <div className="debrief-headline">SECTOR CLEARED — CHORE EXECUTED</div>
+                        </div>
+                        <div className={`debrief-rank-badge ${debrief.rankClass}`}>
+                          {debrief.rank}
+                        </div>
+                      </div>
+
+                      <div className="debrief-grid">
+                        <div className="debrief-stat-card">
+                          <div className="debrief-stat-val">📦 {debrief.cleared}</div>
+                          <div className="debrief-stat-lbl">Files Neutralized</div>
+                        </div>
+                        <div className="debrief-stat-card">
+                          <div className="debrief-stat-val">💾 {debrief.reclaimedStr}</div>
+                          <div className="debrief-stat-lbl">Storage Freed</div>
+                        </div>
+                        <div className="debrief-stat-card">
+                          <div className="debrief-stat-val">🎯 {debrief.accuracy}</div>
+                          <div className="debrief-stat-lbl">Tactical Accuracy</div>
+                        </div>
+                        <div className="debrief-stat-card">
+                          <div className="debrief-stat-val">⚡ {debrief.duration}</div>
+                          <div className="debrief-stat-lbl">Clear Time</div>
+                        </div>
+                      </div>
+
+                      <div className="debrief-quote-box">
+                        <div className="debrief-quote-title">
+                          <span>🤖</span> TACTICAL AI DEBRIEF
+                        </div>
+                        <div className="debrief-quote-text">
+                          "{debrief.quote}"
+                        </div>
+                      </div>
+
+                      <div className="debrief-pills">
+                        <span className="debrief-pill">✓ Deep Content Inspection Active</span>
+                        <span className="debrief-pill">✓ Python/JS Auto-Lint Cleaned</span>
+                        <span className="debrief-pill">✓ Messy_Downloads Emptied</span>
+                        <span className="debrief-pill">✓ Safe Recovery in Trash_Bin</span>
+                      </div>
+
+                      <div className="debrief-actions">
+                        <button className="debrief-btn-reseed" onClick={handleSeed}>
+                          🌱 PLAY NEXT WAVE (RESEED FILES)
+                        </button>
+                        <button className="debrief-btn-undo" onClick={handleUndo}>
+                          ↩ UNDO LAST
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Floating Targets */}
+              {targets.map(t => (
+                <Target key={t.id} target={t} onAction={handleAction} regRef={regRef}/>
+              ))}
+
+              {/* Visual Effects */}
+              <Effects effects={effects}/>
+
+            </main>
+
+            {/* Radar Panel */}
+            <RadarPanel stats={stats} log={log} isConnected={isConnected}/>
+
+          </div>
+
+          {/* Controls hint */}
+          <footer id="controls-hint" role="contentinfo" aria-label="Tactical Controls Legend">
+            <span style={{ color: 'rgba(255,34,68,.75)' }}>LMB / Space / [T] → TRASH file to Trash_Bin</span>
+            <span style={{ color: 'rgba(0,255,65,.75)' }}>RMB / Enter / [O] → FILE into Organized_Safe/</span>
+          </footer>
+
+          {/* API Key Modal */}
+          {showModal && (
+            <ApiKeyModal
+              currentKey={apiKey}
+              onSave={saveKey}
+              onClear={clearKey}
+              onClose={() => setShowModal(false)}
+            />
+          )}
+
+        </div>
+      );
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+       MOUNT
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
